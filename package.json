@@ -1,0 +1,20 @@
+{
+  "name": "nodejs-openhab-test-suite-backend",
+  "version": "1.0.0",
+  "description": "Express backend for the nodejs-openhab-test-suite web frontend",
+  "author": "Michael Christian Dörflinger <michaeldoerflinger93@gmail.com>",
+  "license": "MIT",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev":   "node --watch server.js"
+  },
+  "engines": { "node": ">=18.0.0" },
+  "dependencies": {
+    "express":   "^4.19.2",
+    "cors":      "^2.8.5",
+    "nodejs-openhab-rest-client":  "^1.0.0",
+    "nodejs-openhab-test-suite":   "^1.0.0"
+  }
+}
