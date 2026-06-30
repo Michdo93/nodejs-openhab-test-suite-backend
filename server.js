@@ -68,6 +68,40 @@ async function buildClient(url, username, password, token) {
     : new OpenHABClient(base, username || null, password || null);
   await raw.login();
 
+  // ── Workaround for a known myopenHAB / openHAB 3+ quirk ──────────────────
+  // OpenHABClient.login() checks `${url}/rest` (no trailing slash). Locally,
+  // openHAB 3+ responds to that with a 302 redirect to `${url}/rest/`, which
+  // a normal HTTP client follows transparently. BUT myopenHAB's cloud proxy
+  // does NOT forward that redirect correctly and instead answers the bare
+  // `/rest` request with a flat 401 Unauthorized — even with fully correct
+  // credentials. This is a documented upstream issue, not a credentials
+  // problem: https://github.com/openhab/openhab-android/issues/2145
+  //
+  // login() swallows fetch errors into isLoggedIn=false without surfacing
+  // the cause, so we retry once against the trailing-slash form ourselves.
+  if (!raw.isLoggedIn) {
+    try {
+      const headers = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      } else if (username && password) {
+        headers["Authorization"] =
+          "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
+      }
+      const retry = await fetch(base + "/rest/", { headers });
+      if (retry.ok) raw.isLoggedIn = true;
+    } catch (e) {
+      // leave isLoggedIn as-is; the original error path in /api/connect
+      // will still surface a useful message
+    }
+  }
+
+  // OpenHABClient.login() does an EXACT string match against
+  // "https://myopenhab.org" for isCloud — variants like a trailing slash
+  // or "home.myopenhab.org" would be misdetected as local. Override with
+  // a more robust check, same fix already applied to the Python backend.
+  raw.isCloud = base.includes("myopenhab.org");
+
   raw._items       = new Items(raw);
   raw._things      = new Things(raw);
   raw._rules       = new Rules(raw);
