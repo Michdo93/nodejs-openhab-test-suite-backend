@@ -28,6 +28,16 @@ import {
 } from "nodejs-openhab-test-suite";
 
 const app  = express();
+/**
+ * IMPORTANT — network reachability:
+ * This backend runs on Render.com's public cloud network. It can reach
+ * myopenhab.org (public internet) but it can NEVER reach a private LAN
+ * address like 192.168.0.5:8080 — private IP ranges are by definition
+ * unroutable from outside that LAN. For testing against a local openHAB
+ * instance, run this backend locally instead (`npm start`), or use the
+ * pure-JS browser frontend, which runs on the user's own machine and CAN
+ * reach the local network (subject to CORS being enabled on openHAB).
+ */
 const PORT = process.env.PORT ?? 8080;
 
 app.use(cors());
@@ -41,8 +51,19 @@ app.use(express.json());
  */
 async function buildClient(url, username, password, token) {
   if (!url) throw new Error("url is required");
-  const base = url.replace(/\/+$/, "");
-  const raw  = token
+
+  // NOTE: fetch() requires an absolute URL with an explicit protocol.
+  // A bare host like "192.168.0.5:8080" is NOT a valid absolute URL in
+  // Node's fetch — it throws "Failed to parse URL from ...". Browsers
+  // resolve such bare hosts relative to the current page instead (which
+  // is its own bug, fixed separately in the pure-JS frontend); Node has
+  // no "current page" to fall back to, so it throws immediately.
+  let base = url.trim().replace(/\/+$/, "");
+  if (!/^https?:\/\//i.test(base)) {
+    base = "http://" + base; // local openHAB instances are rarely TLS-terminated
+  }
+
+  const raw = token
     ? new OpenHABClient(base, null, null, token)
     : new OpenHABClient(base, username || null, password || null);
   await raw.login();
@@ -112,6 +133,21 @@ app.post("/api/connect", async (req, res) => {
   const { url, username, password, token } = req.body ?? {};
   try {
     const client = await buildClient(url, username, password, token);
+
+    // NOTE: nodejs-openhab-rest-client's login() swallows its own fetch
+    // errors internally (console.error only, no throw), so client.isLoggedIn
+    // staying false carries no error detail here. We re-verify explicitly
+    // so the frontend gets an actionable message instead of a silent failure.
+    if (!client.isLoggedIn) {
+      return res.json({
+        loggedIn: false,
+        isCloud:  client.isCloud,
+        error: `Could not reach ${client.url}/rest — check the URL, ` +
+               `that the host is reachable from Render.com's network, ` +
+               `and that credentials are correct.`,
+      });
+    }
+
     res.json({ loggedIn: client.isLoggedIn, isCloud: client.isCloud });
   } catch (e) {
     console.error("connect error:", e.message);
