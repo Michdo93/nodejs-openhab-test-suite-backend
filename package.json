@@ -14,7 +14,7 @@
   "dependencies": {
     "express":   "^4.19.2",
     "cors":      "^2.8.5",
-    "nodejs-openhab-rest-client":  "^1.0.0",
+    "nodejs-openhab-rest-client":  "^1.0.1",
     "nodejs-openhab-test-suite":   "^1.0.0"
   }
 }
